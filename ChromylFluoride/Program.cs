@@ -88,7 +88,6 @@ public static partial class Program {
 
 	private static unsafe void ApplyEffect(IntPtr hdcScreen, IntPtr hdcMem, uint* bits, int rand, int timeElapsed) {
 		timeElapsed %= 80;
-		timeElapsed += 35;
 		if (timeElapsed > 70) {
 			return;
 		}
