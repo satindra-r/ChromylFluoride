@@ -87,12 +87,12 @@ public static partial class Program {
 
 
 	private static unsafe void ApplyEffect(IntPtr hdcScreen, IntPtr hdcMem, uint* bits, int rand, int timeElapsed) {
-		timeElapsed %= 50;
-		if (timeElapsed >= 40) {
+		timeElapsed %= 80;
+		timeElapsed += 35;
+		if (timeElapsed > 70) {
 			return;
 		}
-		
-		
+
 
 		BitBlt(hdcMem, 0, 0, _screenWidth, _screenHeight, hdcScreen, 0, 0, SrcCopy);
 		using var bufferRead = GraphicsDevice.GetDefault()
@@ -100,22 +100,31 @@ public static partial class Program {
 		using var bufferWrite = GraphicsDevice.GetDefault()
 			.AllocateReadWriteBuffer<uint>(new Span<uint>(bits, _totalPixels));
 
-		if (timeElapsed < 10) {
+		if (timeElapsed < 5) {
 			GraphicsDevice.GetDefault().For(bufferRead.Length,
 				new LsbCorrupt(bufferRead, bufferWrite, _screenWidth, _screenHeight, rand));
 		}
-		else if (timeElapsed < 20) {
+		else if (timeElapsed < 25) {
 			GraphicsDevice.GetDefault().For(bufferRead.Length,
 				new HueShift(bufferRead, bufferWrite, _screenWidth, _screenHeight, rand));
 		}
-		else if (timeElapsed < 30) {
+		else if (timeElapsed < 40) {
 			GraphicsDevice.GetDefault().For(bufferRead.Length,
 				new PixelWalk(bufferRead, bufferWrite, _screenWidth, _screenHeight, rand));
 		}
-		else {
+		else if (timeElapsed < 50) {
+			GraphicsDevice.GetDefault().For(bufferRead.Length,
+				new BigMelt(bufferRead, bufferWrite, _screenWidth, _screenHeight, rand));
+		}
+		else if (timeElapsed < 65) {
+			GraphicsDevice.GetDefault().For(bufferRead.Length,
+				new SmallMelt(bufferRead, bufferWrite, _screenWidth, _screenHeight, rand));
+		}
+		else if(timeElapsed < 70) {
 			GraphicsDevice.GetDefault().For(bufferRead.Length,
 				new Gaussian(bufferRead, bufferWrite, _screenWidth, _screenHeight, rand));
 		}
+
 
 		bufferWrite.CopyTo(new Span<uint>(bits, _totalPixels));
 		BitBlt(hdcScreen, 0, 0, _screenWidth, _screenHeight, hdcMem, 0, 0, SrcCopy);
@@ -166,6 +175,7 @@ public static partial class Program {
 				Thread.Sleep(200);
 				waveOut.Stop();
 			}
+
 			Thread.Sleep(500);
 		}
 	}

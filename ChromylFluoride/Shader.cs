@@ -83,6 +83,72 @@ public readonly partial struct LsbCorrupt : IComputeShader {
 }
 
 [AutoConstructor]
+public readonly partial struct BigMelt : IComputeShader {
+	private readonly ReadOnlyBuffer<uint> _bufferRead;
+	private readonly ReadWriteBuffer<uint> _bufferWrite;
+	private readonly int _screenWidth;
+	private readonly int _screenHeight;
+	private readonly int _seed;
+
+	int Mod(int a, int b) {
+		return (a % b + b) % b;
+	}
+
+	public void Execute() {
+		var x = ThreadIds.X % _screenWidth;
+		var y = ThreadIds.X / _screenWidth;
+		var yTarget = (int)(256 * Hlsl.Sin(x * 2 * (float)Math.PI / _screenWidth));
+		var xTarget = (int)(256 * Hlsl.Sin(y * 2 * (float)Math.PI / _screenHeight));
+		var xPos = x;
+		var yPos = y;
+
+		if (_seed % 256 < Hlsl.Abs(yTarget)) {
+			yPos = Mod(y - Hlsl.Sign(yTarget), _screenHeight);
+		}
+
+		if ((_seed / 256) % 256 < Hlsl.Abs(xTarget)) {
+			xPos = Mod(x - Hlsl.Sign(xTarget), _screenWidth);
+		}
+
+		_bufferWrite[ThreadIds.X] =
+			_bufferRead[yPos * _screenWidth + xPos];
+	}
+}
+
+[AutoConstructor]
+public readonly partial struct SmallMelt : IComputeShader {
+	private readonly ReadOnlyBuffer<uint> _bufferRead;
+	private readonly ReadWriteBuffer<uint> _bufferWrite;
+	private readonly int _screenWidth;
+	private readonly int _screenHeight;
+	private readonly int _seed;
+
+	int Mod(int a, int b) {
+		return (a % b + b) % b;
+	}
+
+	public void Execute() {
+		var x = ThreadIds.X % _screenWidth;
+		var y = ThreadIds.X / _screenWidth;
+		var yTarget = (int)(256 * Hlsl.Sin(x * 16 * (float)Math.PI / _screenWidth));
+		var xTarget = (int)(256 * Hlsl.Sin(y * 16 * (float)Math.PI / _screenHeight));
+		var xPos = x;
+		var yPos = y;
+
+		if (_seed % 256 < Hlsl.Abs(yTarget)) {
+			yPos = Mod(y - Hlsl.Sign(yTarget), _screenHeight);
+		}
+
+		if ((_seed / 256) % 256 < Hlsl.Abs(xTarget)) {
+			xPos = Mod(x - Hlsl.Sign(xTarget), _screenWidth);
+		}
+
+		_bufferWrite[ThreadIds.X] =
+			_bufferRead[yPos * _screenWidth + xPos];
+	}
+}
+
+[AutoConstructor]
 public readonly partial struct PixelWalk : IComputeShader {
 	private readonly ReadOnlyBuffer<uint> _bufferRead;
 	private readonly ReadWriteBuffer<uint> _bufferWrite;
@@ -102,39 +168,39 @@ public readonly partial struct PixelWalk : IComputeShader {
 		var y = ThreadIds.X / _screenWidth;
 
 		var rand = Hlsl.Abs((int)GenRand((uint)(_seed * ThreadIds.X + 1)));
-		var shiftX = (rand & 1) == 1;
-		var shiftY = (rand & 2) == 2;
-		var posX = x;
-		var posY = y;
+		var xShift = (rand & 1) == 1;
+		var yShift = (rand & 2) == 2;
+		var xPos = x;
+		var yPos = y;
 
 		rand >>= 2;
-		if (shiftX) {
+		if (xShift) {
 			var dx = rand % 3 - 1;
-			posX = x + dx;
+			xPos = x + dx;
 		}
 
-		if (shiftY) {
+		if (yShift) {
 			var dy = rand / 3 % 3 - 1;
-			posY = y + dy;
+			yPos = y + dy;
 		}
 
-		if (posX < 0) {
-			posX += _screenWidth;
+		if (xPos < 0) {
+			xPos += _screenWidth;
 		}
 
-		if (posX > _screenWidth - 1) {
-			posX -= _screenWidth;
+		if (xPos > _screenWidth - 1) {
+			xPos -= _screenWidth;
 		}
 
-		if (posY < 0) {
-			posY += _screenHeight;
+		if (yPos < 0) {
+			yPos += _screenHeight;
 		}
 
-		if (posY > _screenHeight - 1) {
-			posY -= _screenHeight;
+		if (yPos > _screenHeight - 1) {
+			yPos -= _screenHeight;
 		}
 
-		_bufferWrite[ThreadIds.X] = _bufferRead[posY * _screenWidth + posX];
+		_bufferWrite[ThreadIds.X] = _bufferRead[yPos * _screenWidth + xPos];
 	}
 }
 
