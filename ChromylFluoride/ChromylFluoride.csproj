@@ -1,0 +1,19 @@
+﻿<Project Sdk="Microsoft.NET.Sdk">
+
+    <PropertyGroup>
+        <OutputType>WinExe</OutputType>
+        <TargetFramework>net9.0</TargetFramework>
+        <ImplicitUsings>enable</ImplicitUsings>
+        <Nullable>enable</Nullable>
+        <AllowUnsafeBlocks>true</AllowUnsafeBlocks>
+        <SelfContained>true</SelfContained>
+        <PublishSingleFile>true</PublishSingleFile>
+    </PropertyGroup>
+
+    <ItemGroup>
+        <PackageReference Include="ComputeSharp" Version="2.1.0" />
+        <PackageReference Include="ComputeSharp.Dynamic" Version="2.1.0" />
+        <PackageReference Include="NAudio" Version="2.2.1" />
+    </ItemGroup>
+
+</Project>
