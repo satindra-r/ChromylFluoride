@@ -163,7 +163,7 @@ public static partial class Program {
 		var randGen = new Random();
 		using var waveOut = new WaveOutEvent();
 		while (_running) {
-			if ((DateTimeOffset.UtcNow.ToUnixTimeSeconds() - startTime) % 50 < 40) {
+			if ((DateTimeOffset.UtcNow.ToUnixTimeSeconds() - startTime) % 80 < 70) {
 				var sineWaveGenerator = new WaveProvider32 {
 					Frequency = 220 * (float)Math.Pow(2, (float)randGen.Next(36) / 12),
 					Amplitude = 0.25f,
