@@ -131,7 +131,7 @@ public static partial class Program {
 			GraphicsDevice.GetDefault().For(bufferRead.Length,
 				new SmallMelt(bufferRead, bufferWrite, _screenWidth, _screenHeight, rand));
 		}
-		
+
 		bufferWrite.CopyTo(new Span<uint>(bits, _totalPixels));
 		BitBlt(hdcScreen, 0, 0, _screenWidth, _screenHeight, hdcMem, 0, 0, SrcCopy);
 	}
@@ -167,35 +167,42 @@ public static partial class Program {
 
 	private static void GenAudio() {
 		var startTime = DateTimeOffset.UtcNow.ToUnixTimeSeconds();
-		var randGen = new Random();
 		using var waveOut = new WaveOutEvent();
 		while (_running) {
-			if ((DateTimeOffset.UtcNow.ToUnixTimeSeconds() - startTime) % CumulativeTimings[Timings.Length - 1] <
-			    CumulativeTimings[Timings.Length - 2]) {
+			int timeElapsed = (int)(DateTimeOffset.UtcNow.ToUnixTimeSeconds() - startTime) %
+			                  CumulativeTimings[Timings.Length - 1];
+			if (timeElapsed < CumulativeTimings[Timings.Length - 2]) {
+				int payload = 0;
+				for (int i = 0; i < Timings.Length; i++) {
+					if (timeElapsed >= CumulativeTimings[i]) {
+						payload++;
+					}
+				}
+
+				int duration = 200;
 				var sineWaveGenerator = new WaveProvider32 {
-					Frequency = 220 * (float)Math.Pow(2, (float)randGen.Next(36) / 12),
 					Amplitude = 0.25f,
-					TotalSamples = 441 * 20
+					Duration = duration,
+					Payload = payload
 				};
 				waveOut.Init(sineWaveGenerator);
 				waveOut.Play();
-				Thread.Sleep(200);
+				Thread.Sleep(duration);
 				waveOut.Stop();
 			}
 
-			Thread.Sleep(500);
+			Thread.Sleep(50);
 		}
 	}
 
 	private static void CheckExit() {
 		while (_running) {
-			if ((GetAsyncKeyState(0x1B) & 0x8000) != 0) // VK_ESCAPE
-			{
+			if ((GetAsyncKeyState(0x1B) & 0x8000) != 0) {
 				_running = false;
 				break;
 			}
 
-			Thread.Sleep(50);
+			Thread.Sleep(500);
 		}
 	}
 
@@ -220,26 +227,54 @@ public static partial class Program {
 }
 
 internal class WaveProvider32 : ISampleProvider {
-	public float Frequency { get; init; }
 	public float Amplitude { get; init; }
-	public int TotalSamples { get; init; }
-	private float _phase;
-	private int _samplesUsed;
+	public int Duration { get; init; }
+	public int Payload { get; init; }
+
+	private double _time;
+	private double _frequency;
 
 	public WaveFormat WaveFormat => WaveFormat.CreateIeeeFloatWaveFormat(44100, 1);
 
 	public int Read(float[] buffer, int offset, int count) {
+		var randGen = new Random();
+		_frequency = 220 * Math.Pow(2, (float)randGen.Next(36) / 12);
 		for (var n = 0; n < count; n++) {
 			buffer[offset + n] = 0;
-			for (var i = 0; i < 10; i++) {
-				buffer[offset + n] +=
-					(float)(Math.Exp(-5.0 * _samplesUsed / TotalSamples) * Math.Pow(i + 1, -2) * Amplitude *
-					        Math.Sin((i + 1) * _phase * 2 * Math.PI));
+			switch (Payload) {
+				case 0:
+					buffer[offset + n] += (float)((randGen.NextDouble() - 0.5) * Amplitude / 8);
+					break;
+				case 1:
+				case 2:
+					for (var i = 0; i < 10; i++) {
+						buffer[offset + n] +=
+							(float)(Math.Exp(-5.0 * _time * 1000f / Duration) * Math.Pow(i + 1, -2) * Amplitude *
+							        Math.Sin((i + 1) * _frequency * (2 * Math.PI * _time)));
+					}
+
+					break;
+				case 3:
+					for (var i = 0; i < 10; i++) {
+						buffer[offset + n] +=
+							(float)((1 - randGen.NextDouble() * 0.1f) * Math.Exp(-5.0 * _time * 1000f / Duration) *
+							        Math.Pow(i + 1, -2) * Amplitude *
+							        Math.Sin((i + 1) * _frequency * (2 * Math.PI * _time)));
+					}
+
+					break;
+				case 4:
+				case 5:
+					for (var i = 0; i < 10; i++) {
+						buffer[offset + n] +=
+							(float)(Math.Exp(-5.0 * _time * 1000f / Duration) * Math.Pow(i + 1, -2) * Amplitude *
+							        Math.Sin(((i + 1) * _frequency + 5 * Math.Sin(25 * 2 * Math.PI * _time)) *
+							                 (2 * Math.PI * _time)));
+					}
+					break;
 			}
 
-			_samplesUsed++;
-			_phase += Frequency / WaveFormat.SampleRate;
-			if (_phase > 1) _phase -= 1;
+			_time += 1.0f / WaveFormat.SampleRate;
 		}
 
 		return count;

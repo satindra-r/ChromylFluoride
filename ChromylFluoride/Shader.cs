@@ -10,16 +10,16 @@ public readonly partial struct HueShift : IComputeShader {
 	private readonly int _screenHeight;
 	private readonly int _seed;
 
-	private static int3 GetRgb(uint pixel) {
+	private static int3 SplitColours(uint pixel) {
 		return new int3((int)(pixel & 0x00ff0000) >> 16, (int)(pixel & 0x0000ff00) >> 8, (int)(pixel & 0x000000ff));
 	}
 
-	private static uint ToRgb(int r, int g, int b) {
+	private static uint JoinColours(int r, int g, int b) {
 		return 0xff000000 | (uint)r << 16 | (uint)g << 8 | (uint)b;
 	}
 
 	public void Execute() {
-		var rgb = GetRgb(_bufferRead[ThreadIds.X]);
+		var rgb = SplitColours(_bufferRead[ThreadIds.X]);
 		var inc = 0;
 		var range = Hlsl.Max(Hlsl.Max(rgb.R, rgb.G), rgb.B) - Hlsl.Min(Hlsl.Min(rgb.R, rgb.G), rgb.B);
 		if (_seed % 256 < range) {
@@ -57,7 +57,7 @@ public readonly partial struct HueShift : IComputeShader {
 			}
 		}
 
-		_bufferWrite[ThreadIds.X] = ToRgb(rgb.R, rgb.G, rgb.B);
+		_bufferWrite[ThreadIds.X] = JoinColours(rgb.R, rgb.G, rgb.B);
 	}
 }
 
@@ -224,6 +224,14 @@ public readonly partial struct Jitter : IComputeShader {
 	private readonly int _screenHeight;
 	private readonly int _seed;
 
+	private static int3 SplitColours(uint pixel) {
+		return new int3((int)(pixel & 0x00ff0000) >> 16, (int)(pixel & 0x0000ff00) >> 8, (int)(pixel & 0x000000ff));
+	}
+
+	private static uint JoinColours(int r, int g, int b) {
+		return 0xff000000 | (uint)r << 16 | (uint)g << 8 | (uint)b;
+	}
+
 	int Mod(int a, int b) {
 		if (a >= b) {
 			return a - b;
@@ -239,8 +247,10 @@ public readonly partial struct Jitter : IComputeShader {
 	public void Execute() {
 		var x = ThreadIds.X % _screenWidth;
 		var y = ThreadIds.X / _screenWidth;
-		var xPos = Mod(x + ((_seed % 32) - 16), _screenWidth);
-		var yPos = Mod(y + (((_seed / 32) % 32) - 16), _screenHeight);
-		_bufferWrite[ThreadIds.X] = _bufferRead[yPos * _screenWidth + xPos];
+		var xPos = new int3(Mod(x + ((_seed % 32) - 16), _screenWidth),
+			Mod(x + (((_seed >> 5) % 32) - 16), _screenWidth), Mod(x + (((_seed >> 10) % 32) - 16), _screenWidth));
+		var yPos = new int3(Mod(y + (((_seed >> 15) % 32) - 16), _screenHeight),
+			Mod(y + (((_seed >> 20) % 32) - 16), _screenHeight), Mod(y + (((_seed >> 25) % 32) - 16), _screenHeight));
+		_bufferWrite[ThreadIds.X] = JoinColours(SplitColours(_bufferRead[yPos[0] * _screenWidth + xPos[0]]).R,SplitColours(_bufferRead[yPos[1] * _screenWidth + xPos[1]]).G,SplitColours(_bufferRead[yPos[2] * _screenWidth + xPos[2]]).B);
 	}
 }
