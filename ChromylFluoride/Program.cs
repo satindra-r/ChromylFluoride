@@ -1,10 +1,13 @@
-﻿using System.Runtime.InteropServices;
+﻿using System.Diagnostics;
+using System.Runtime.InteropServices;
 using ComputeSharp;
 using NAudio.Wave;
 
 namespace ChromylFluoride;
 
 public static partial class Program {
+	private static ReadWriteBuffer<uint> _bufferWrite = null!;
+	private static ReadOnlyBuffer<uint> _bufferRead = null!;
 	private const int SrcCopy = 0x00CC0020;
 
 	#region Structs
@@ -91,53 +94,50 @@ public static partial class Program {
 		CumulativeTimings[0] = Timings[0];
 		for (var i = 1; i < Timings.Length; i++) {
 			CumulativeTimings[i] = CumulativeTimings[i - 1] + Timings[i];
-		}
+		}	
 	}
 
 	private static unsafe void ApplyEffect(IntPtr hdcScreen, IntPtr hdcMem, uint* bits, int rand, int timeElapsed) {
-		timeElapsed %= 80;
-		if (timeElapsed > 70) {
+		timeElapsed %= CumulativeTimings[Timings.Length-1];
+		if (timeElapsed > CumulativeTimings[Timings.Length-2]) {
 			return;
 		}
 
 
 		BitBlt(hdcMem, 0, 0, _screenWidth, _screenHeight, hdcScreen, 0, 0, SrcCopy);
-		using var bufferRead = GraphicsDevice.GetDefault()
-			.AllocateReadOnlyBuffer<uint>(new Span<uint>(bits, _totalPixels));
-		using var bufferWrite = GraphicsDevice.GetDefault()
-			.AllocateReadWriteBuffer<uint>(new Span<uint>(bits, _totalPixels));
-
+		
+		_bufferRead.CopyFrom(new Span<uint>(bits, _totalPixels));
 		if (timeElapsed < CumulativeTimings[0]) {
-			GraphicsDevice.GetDefault().For(bufferRead.Length,
-				new LsbCorrupt(bufferRead, bufferWrite, _screenWidth, _screenHeight, rand));
+			GraphicsDevice.GetDefault().For(_bufferRead.Length,
+				new LsbCorrupt(_bufferRead, _bufferWrite, _screenWidth, _screenHeight, rand));
 		}
 		else if (timeElapsed < CumulativeTimings[1]) {
-			GraphicsDevice.GetDefault().For(bufferRead.Length,
-				new HueShift(bufferRead, bufferWrite, _screenWidth, _screenHeight, rand));
+			GraphicsDevice.GetDefault().For(_bufferRead.Length,
+				new HueShift(_bufferRead, _bufferWrite, _screenWidth, _screenHeight, rand));
 		}
 		else if (timeElapsed < CumulativeTimings[2]) {
-			GraphicsDevice.GetDefault().For(bufferRead.Length,
-				new Jitter(bufferRead, bufferWrite, _screenWidth, _screenHeight, rand));
+			GraphicsDevice.GetDefault().For(_bufferRead.Length,
+				new Jitter(_bufferRead, _bufferWrite, _screenWidth, _screenHeight, rand));
 		}
 		else if (timeElapsed < CumulativeTimings[3]) {
-			GraphicsDevice.GetDefault().For(bufferRead.Length,
-				new PixelWalk(bufferRead, bufferWrite, _screenWidth, _screenHeight, rand));
+			GraphicsDevice.GetDefault().For(_bufferRead.Length,
+				new PixelWalk(_bufferRead, _bufferWrite, _screenWidth, _screenHeight, rand));
 		}
 		else if (timeElapsed < CumulativeTimings[4]) {
-			GraphicsDevice.GetDefault().For(bufferRead.Length,
-				new BigMelt(bufferRead, bufferWrite, _screenWidth, _screenHeight, rand));
+			GraphicsDevice.GetDefault().For(_bufferRead.Length,
+				new BigMelt(_bufferRead, _bufferWrite, _screenWidth, _screenHeight, rand));
 		}
 		else if (timeElapsed < CumulativeTimings[5]) {
-			GraphicsDevice.GetDefault().For(bufferRead.Length,
-				new SmallMelt(bufferRead, bufferWrite, _screenWidth, _screenHeight, rand));
+			GraphicsDevice.GetDefault().For(_bufferRead.Length,
+				new SmallMelt(_bufferRead, _bufferWrite, _screenWidth, _screenHeight, rand));
 		}
 
-		bufferWrite.CopyTo(new Span<uint>(bits, _totalPixels));
+		_bufferWrite.CopyTo(new Span<uint>(bits, _totalPixels));
 		BitBlt(hdcScreen, 0, 0, _screenWidth, _screenHeight, hdcMem, 0, 0, SrcCopy);
 	}
 
 	private static unsafe void GenVisuals() {
-		var startTime = DateTimeOffset.UtcNow.ToUnixTimeSeconds();
+		var startTime = Stopwatch.GetTimestamp();
 		var hdcScreen = GetDC(IntPtr.Zero);
 		var hdcMem = CreateCompatibleDC(hdcScreen);
 		var randGen = new Random();
@@ -153,11 +153,15 @@ public static partial class Program {
 			bmiColors = new uint[1024]
 		};
 
+		_bufferRead = GraphicsDevice.GetDefault()
+			.AllocateReadOnlyBuffer<uint>(_totalPixels);
+		_bufferWrite = GraphicsDevice.GetDefault()
+			.AllocateReadWriteBuffer<uint>(_totalPixels);
 		var hBitmap = CreateDIBSection(hdcScreen, ref bmi, 0, out var bits, IntPtr.Zero, 0);
 		SelectObject(hdcMem, hBitmap);
 		while (_running) {
 			ApplyEffect(hdcScreen, hdcMem, bits, randGen.Next(),
-				(int)(DateTimeOffset.UtcNow.ToUnixTimeSeconds() - startTime));
+				(int)((Stopwatch.GetTimestamp() - startTime)/Stopwatch.Frequency));
 		}
 
 		DeleteObject(hBitmap);
@@ -166,20 +170,20 @@ public static partial class Program {
 	}
 
 	private static void GenAudio() {
-		var startTime = DateTimeOffset.UtcNow.ToUnixTimeSeconds();
+		var startTime = Stopwatch.GetTimestamp();
 		using var waveOut = new WaveOutEvent();
 		while (_running) {
-			int timeElapsed = (int)(DateTimeOffset.UtcNow.ToUnixTimeSeconds() - startTime) %
+			var timeElapsed = (int)((Stopwatch.GetTimestamp() - startTime)/Stopwatch.Frequency) %
 			                  CumulativeTimings[Timings.Length - 1];
 			if (timeElapsed < CumulativeTimings[Timings.Length - 2]) {
-				int payload = 0;
-				for (int i = 0; i < Timings.Length; i++) {
+				var payload = 0;
+				for (var i = 0; i < Timings.Length; i++) {
 					if (timeElapsed >= CumulativeTimings[i]) {
 						payload++;
 					}
 				}
 
-				int duration = 200;
+				const int duration = 200;
 				var sineWaveGenerator = new WaveProvider32 {
 					Amplitude = 0.25f,
 					Duration = duration,
